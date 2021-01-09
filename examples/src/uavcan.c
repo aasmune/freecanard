@@ -8,7 +8,7 @@
 #define NODE_ID 1
 
 #define MEMORY_POOL_BUS_0_SIZE 8196
-static uint8_t memory_pool_bus_0[MEMORY_POOL_BUS_0_SIZE];
+static uint8_t memory_pool_bus_0[MEMORY_POOL_BUS_0_SIZE] __attribute__ ((aligned (O1HEAP_ALIGNMENT)));
 static freecanard_cookie_t cookie_0;
 
 CanardRxSubscription heartbeat_subscription;
@@ -26,7 +26,7 @@ void uavcan_init()
         (uint8_t *)memory_pool_bus_0,
         MEMORY_POOL_BUS_0_SIZE,
         tskIDLE_PRIORITY,
-        10,
+        FREECANARD_DEFAULT_PROCESSING_TASK_QUEUE_SIZE,
         send,
         uavcan_on_transfer_received);
 

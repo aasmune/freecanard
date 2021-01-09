@@ -161,10 +161,11 @@ static void task_2(void *pvParameters)
 	frame.data[7] = 0xe2;
 	frame.data_len = 8;
 
+	uint8_t transfer_id = 0;
 	for (;;)
 	{
 		vTaskDelayUntil(&xNextWakeTime, xBlockTime);
-
+		frame.data[7] = 0xe0 | (transfer_id++ & 0x1FU);
 		freecanard_process_received_frame(
 			&bus_0,
 			&frame,

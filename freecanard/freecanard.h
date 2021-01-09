@@ -31,7 +31,7 @@ typedef struct
  * 
  * @return <0               In case if error.
  */
-typedef int16_t (*freecanard_platform_send)(
+typedef int8_t (*freecanard_platform_send)(
     const freecanard_frame_t *const frame,
     const bool can_fd);
 

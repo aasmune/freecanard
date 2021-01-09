@@ -1,5 +1,5 @@
 CC := gcc
-BIN := posix_demo
+BIN := freecanard_demo
 
 BUILD_DIR := build
 

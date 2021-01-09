@@ -7,7 +7,7 @@
 static uint8_t memory_pool_bus_0[MEMORY_POOL_BUS_0_SIZE];
 static freecanard_cookie_t cookie_0;
 
-static void send(const freecanard_frame_t *const frame, const bool can_fd);
+static int8_t send(const freecanard_frame_t *const frame, const bool can_fd);
 
 void uavcan_init()
 {
@@ -22,7 +22,7 @@ void uavcan_init()
         send);
 }
 
-static void send(const freecanard_frame_t *const frame, const bool can_fd)
+static int8_t send(const freecanard_frame_t *const frame, const bool can_fd)
 {
     printf("Sending msg: \n");
     printf("ID: %x\n", frame->id);

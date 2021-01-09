@@ -20,7 +20,6 @@ INCLUDE_DIRS += -I${FREERTOS_DIR}/Source/include
 INCLUDE_DIRS += -I${FREERTOS_DIR}/Source/portable/ThirdParty/GCC/Posix
 INCLUDE_DIRS += -I${FREERTOS_DIR}/Source/portable/ThirdParty/GCC/Posix/utils
 INCLUDE_DIRS += -I${FREERTOS_DIR}/common/include
-INCLUDE_DIRS += -I${FREERTOS_DIR}/FreeRTOS-Plus-Trace/Include
 INCLUDE_DIRS += -I${LIBCANARD_DIR}
 INCLUDE_DIRS += -I${O1HEAP_DIR}
 
@@ -57,13 +56,6 @@ SOURCE_FILES += ${FREERTOS_DIR}/common/Minimal/semtest.c
 SOURCE_FILES += ${FREERTOS_DIR}/common/Minimal/StaticAllocation.c
 SOURCE_FILES += ${FREERTOS_DIR}/common/Minimal/StreamBufferInterrupt.c
 SOURCE_FILES += ${FREERTOS_DIR}/common/Minimal/TaskNotify.c
-
-# Trace library.
-SOURCE_FILES += ${FREERTOS_DIR}/FreeRTOS-Plus-Trace/trcKernelPort.c
-SOURCE_FILES += ${FREERTOS_DIR}/FreeRTOS-Plus-Trace/trcSnapshotRecorder.c
-SOURCE_FILES += ${FREERTOS_DIR}/FreeRTOS-Plus-Trace/trcStreamingRecorder.c
-SOURCE_FILES += ${FREERTOS_DIR}/FreeRTOS-Plus-Trace/streamports/File/trcStreamingPort.c
-
 
 CFLAGS := -ggdb3 -O0 -DprojCOVERAGE_TEST=0 -D_WINDOWS_ -D"NUNAVUT_ASSERT(x)=assert(x)"
 LDFLAGS := -ggdb3 -O0 -pthread -lpcap

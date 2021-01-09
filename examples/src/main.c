@@ -68,49 +68,21 @@
 /* Local includes. */
 #include "console.h"
 
-#define    BLINKY_DEMO       0
-#define    FULL_DEMO         1
-#define    ECHO_CLIENT_DEMO  2
-
-#define mainSELECTED_APPLICATION BLINKY_DEMO
-
 /* This demo uses heap_3.c (the libc provided malloc() and free()). */
 
 /*-----------------------------------------------------------*/
 extern void main_blinky( void );
-extern void main_full( void );
-extern void main_tcp_echo_client_tasks( void );
-static void traceOnEnter( void );
-/*
- * Only the comprehensive demo uses application hook (callback) functions.  See
- * http://www.freertos.org/a00016.html for more information.
- */
-void vFullDemoTickHookFunction( void );
-void vFullDemoIdleFunction( void );
 
 /*
  * Prototypes for the standard FreeRTOS application hook (callback) functions
  * implemented within this file.  See http://www.freertos.org/a00016.html .
  */
-void vApplicationMallocFailedHook( void );
-void vApplicationIdleHook( void );
-void vApplicationStackOverflowHook( TaskHandle_t pxTask,
-									char *pcTaskName );
-void vApplicationTickHook( void );
 void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer,
 									StackType_t **ppxIdleTaskStackBuffer,
 									uint32_t *pulIdleTaskStackSize );
 void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer,
 									 StackType_t **ppxTimerTaskStackBuffer,
 									 uint32_t *pulTimerTaskStackSize );
-
-/*
- * Writes trace data to a disk file when the trace recording is stopped.
- * This function will simply overwrite any trace files that already exist.
- */
-static void prvSaveTraceFile( void );
-
-/*-----------------------------------------------------------*/
 
 /* When configSUPPORT_STATIC_ALLOCATION is set to 1 the application writer can
 use a callback function to optionally provide the memory required by the idle
@@ -125,24 +97,8 @@ static BaseType_t xTraceRunning = pdTRUE;
 
 /*-----------------------------------------------------------*/
 
- static TimerHandle_t xTimer = NULL;
 int main( void )
 {
-	/* Do not include trace code when performing a code coverage analysis. */
-	#if ( projCOVERAGE_TEST != 1 )
-	{
-		/* Initialise the trace recorder.  Use of the trace recorder is optional.
-		See http://www.FreeRTOS.org/trace for more information. */
-		vTraceEnable( TRC_START );
-
-		/* Start the trace recording - the recording is written to a file if
-		configASSERT() is called. */
-		printf( "\r\nTrace started.\r\nThe trace will be dumped to disk if a call to configASSERT() fails.\r\n" );
-		printf( "\r\nThe trace will be dumped to disk if Enter is hit.\r\n" );
-		uiTraceStart();
-	}
-	#endif
-
 	console_init();
 	main_blinky();
 
@@ -153,190 +109,8 @@ int main( void )
 
 	}
 
-
 	return 0;
 }
-/*-----------------------------------------------------------*/
-
-void vApplicationMallocFailedHook( void )
-{
-	/* vApplicationMallocFailedHook() will only be called if
-	configUSE_MALLOC_FAILED_HOOK is set to 1 in FreeRTOSConfig.h.  It is a hook
-	function that will get called if a call to pvPortMalloc() fails.
-	pvPortMalloc() is called internally by the kernel whenever a task, queue,
-	timer or semaphore is created.  It is also called by various parts of the
-	demo application.  If heap_1.c, heap_2.c or heap_4.c is being used, then the
-	size of the	heap available to pvPortMalloc() is defined by
-	configTOTAL_HEAP_SIZE in FreeRTOSConfig.h, and the xPortGetFreeHeapSize()
-	API function can be used to query the size of free heap space that remains
-	(although it does not provide information on how the remaining heap might be
-	fragmented).  See http://www.freertos.org/a00111.html for more
-	information. */
-	vAssertCalled( __FILE__, __LINE__ );
-}
-/*-----------------------------------------------------------*/
-
-void vApplicationIdleHook( void )
-{
-	/* vApplicationIdleHook() will only be called if configUSE_IDLE_HOOK is set
-	to 1 in FreeRTOSConfig.h.  It will be called on each iteration of the idle
-	task.  It is essential that code added to this hook function never attempts
-	to block in any way (for example, call xQueueReceive() with a block time
-	specified, or call vTaskDelay()).  If application tasks make use of the
-	vTaskDelete() API function to delete themselves then it is also important
-	that vApplicationIdleHook() is permitted to return to its calling function,
-	because it is the responsibility of the idle task to clean up memory
-	allocated by the kernel to any task that has since deleted itself. */	
-
-
-	usleep(15000);
-	traceOnEnter();
-
-	#if ( mainSELECTED_APPLICATION == FULL_DEMO )
-	{
-		/* Call the idle task processing used by the full demo.  The simple
-		blinky demo does not use the idle task hook. */
-		vFullDemoIdleFunction();
-	}
-	#endif
-}
-/*-----------------------------------------------------------*/
-
-void vApplicationStackOverflowHook( TaskHandle_t pxTask,
-									char *pcTaskName )
-{
-	( void ) pcTaskName;
-	( void ) pxTask;
-
-	/* Run time stack overflow checking is performed if
-	configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2.  This hook
-	function is called if a stack overflow is detected.  This function is
-	provided as an example only as stack overflow checking does not function
-	when running the FreeRTOS POSIX port. */
-	vAssertCalled( __FILE__, __LINE__ );
-}
-/*-----------------------------------------------------------*/
-
-void vApplicationTickHook( void )
-{
-	/* This function will be called by each tick interrupt if
-	configUSE_TICK_HOOK is set to 1 in FreeRTOSConfig.h.  User code can be
-	added here, but the tick hook is called from an interrupt context, so
-	code must not attempt to block, and only the interrupt safe FreeRTOS API
-	functions can be used (those that end in FromISR()). */
-
-	#if (mainSELECTED_APPLICATION == FULL_DEMO )
-	{
-		vFullDemoTickHookFunction();
-	}
-	#endif /* mainSELECTED_APPLICATION */
-}
-
-void traceOnEnter()
-{
-	int ret;
-	struct timeval tv = { 0L, 0L };
-	fd_set fds;
-	FD_ZERO(&fds);
-	FD_SET(0, &fds);
-	ret = select(1, &fds, NULL, NULL, &tv);
-	if ( ret > 0 )
-	{
-	if( xTraceRunning == pdTRUE )
-	{
-		prvSaveTraceFile();
-	}
-	/* clear the buffer */
-	char buffer[200];
-	read(1, &buffer, 200);
-	}
-}
-
-void vLoggingPrintf( const char *pcFormat,
-					 ... )
-{
-va_list arg;
-
-	va_start( arg, pcFormat );
-	vprintf( pcFormat, arg );
-	va_end( arg );
-}
-/*-----------------------------------------------------------*/
-
-void vApplicationDaemonTaskStartupHook( void )
-{
-	/* This function will be called once only, when the daemon task starts to
-	execute	(sometimes called the timer task).  This is useful if the
-	application includes initialisation code that would benefit from executing
-	after the scheduler has been started. */
-}
-/*-----------------------------------------------------------*/
-
-void vAssertCalled( const char * const pcFileName,
-					unsigned long ulLine )
-{
-static BaseType_t xPrinted = pdFALSE;
-volatile uint32_t ulSetToNonZeroInDebuggerToContinue = 0;
-
-	/* Called if an assertion passed to configASSERT() fails.  See
-	http://www.freertos.org/a00110.html#configASSERT for more information. */
-
-	/* Parameters are not used. */
-	( void ) ulLine;
-	( void ) pcFileName;
-
-
-	taskENTER_CRITICAL();
-	{
-		/* Stop the trace recording. */
-		if( xPrinted == pdFALSE )
-		{
-			xPrinted = pdTRUE;
-
-			if( xTraceRunning == pdTRUE )
-			{
-				prvSaveTraceFile();
-			}
-		}
-
-		/* You can step out of this function to debug the assertion by using
-		the debugger to set ulSetToNonZeroInDebuggerToContinue to a non-zero
-		value. */
-		while( ulSetToNonZeroInDebuggerToContinue == 0 )
-		{
-			__asm volatile ( "NOP" );
-			__asm volatile ( "NOP" );
-		}
-	}
-	taskEXIT_CRITICAL();
-}
-/*-----------------------------------------------------------*/
-
-static void prvSaveTraceFile( void )
-{
-	/* Tracing is not used when code coverage analysis is being performed. */
-	#if ( projCOVERAGE_TEST != 1 )
-	{
-	FILE * pxOutputFile;
-
-		vTraceStop();
-
-		pxOutputFile = fopen( "Trace.dump", "wb" );
-
-		if( pxOutputFile != NULL )
-		{
-			fwrite( RecorderDataPtr, sizeof( RecorderDataType ), 1, pxOutputFile );
-			fclose( pxOutputFile );
-			printf( "\r\nTrace output saved to Trace.dump\r\n" );
-		}
-		else
-		{
-			printf( "\r\nFailed to create trace dump file\r\n" );
-		}
-	}
-	#endif /* if ( projCOVERAGE_TEST != 1 ) */
-}
-/*-----------------------------------------------------------*/
 
 /* configUSE_STATIC_ALLOCATION is set to 1, so the application must provide an
 implementation of vApplicationGetIdleTaskMemory() to provide the memory that is

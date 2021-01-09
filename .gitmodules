@@ -1,0 +1,6 @@
+[submodule "examples/libcanard"]
+	path = examples/libcanard
+	url = https://github.com/UAVCAN/libcanard.git
+[submodule "examples/o1heap"]
+	path = examples/o1heap
+	url = https://github.com/pavel-kirienko/o1heap.git

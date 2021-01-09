@@ -136,12 +136,50 @@ static void task_1(void *pvParameters)
 	}
 }
 
+#define TASK_2_PRIORITY (tskIDLE_PRIORITY + 2)
+#define TASK_2_FREQUENCY_MS pdMS_TO_TICKS(1000UL)
+static void task_2(void *pvParameters)
+{
+	TickType_t xNextWakeTime;
+	const TickType_t xBlockTime = TASK_2_FREQUENCY_MS;
+
+	/* Prevent the compiler warning about the unused parameter. */
+	(void)pvParameters;
+
+	/* Initialise xNextWakeTime - this only needs to be done once. */
+	xNextWakeTime = xTaskGetTickCount();
+
+	freecanard_frame_t frame;
+	frame.id = 0x107d5501;
+	frame.data[0] = 0xb8;
+	frame.data[1] = 0x0b;
+	frame.data[2] = 0x00;
+	frame.data[3] = 0x00;
+	frame.data[4] = 0x00;
+	frame.data[5] = 0x00;
+	frame.data[6] = 0x9d;
+	frame.data[7] = 0xe2;
+	frame.data_len = 8;
+
+	for (;;)
+	{
+		vTaskDelayUntil(&xNextWakeTime, xBlockTime);
+
+		freecanard_process_received_frame(
+			&bus_0,
+			&frame,
+			0,
+			portMAX_DELAY);
+	}
+}
+
 int main(void)
 {
 	console_init();
 	uavcan_init();
 
 	xTaskCreate(task_1, "task 1", configMINIMAL_STACK_SIZE, NULL, TASK_1_PRIORITY, NULL);
+	xTaskCreate(task_2, "task 2", configMINIMAL_STACK_SIZE, NULL, TASK_2_PRIORITY, NULL);
 
 	vTaskStartScheduler();
 	while (1)

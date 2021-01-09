@@ -67,46 +67,85 @@
 
 /* Local includes. */
 #include "console.h"
+#include "uavcan.h"
 
-/* This demo uses heap_3.c (the libc provided malloc() and free()). */
-
-/*-----------------------------------------------------------*/
-extern void main_blinky( void );
+#include "uavcan/node/Heartbeat_1_0.h"
 
 /*
  * Prototypes for the standard FreeRTOS application hook (callback) functions
  * implemented within this file.  See http://www.freertos.org/a00016.html .
  */
-void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer,
-									StackType_t **ppxIdleTaskStackBuffer,
-									uint32_t *pulIdleTaskStackSize );
-void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer,
-									 StackType_t **ppxTimerTaskStackBuffer,
-									 uint32_t *pulTimerTaskStackSize );
+void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
+								   StackType_t **ppxIdleTaskStackBuffer,
+								   uint32_t *pulIdleTaskStackSize);
+void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
+									StackType_t **ppxTimerTaskStackBuffer,
+									uint32_t *pulTimerTaskStackSize);
 
 /* When configSUPPORT_STATIC_ALLOCATION is set to 1 the application writer can
 use a callback function to optionally provide the memory required by the idle
 and timer tasks.  This is the stack that will be used by the timer task.  It is
 declared here, as a global, so it can be checked by a test that is implemented
 in a different file. */
-StackType_t uxTimerTaskStack[ configTIMER_TASK_STACK_DEPTH ];
+StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH];
 
 /* Notes if the trace is running or not. */
 static BaseType_t xTraceRunning = pdTRUE;
 
-
 /*-----------------------------------------------------------*/
 
-int main( void )
+#define TASK_1_PRIORITY (tskIDLE_PRIORITY + 1)
+#define TASK_1_FREQUENCY_MS pdMS_TO_TICKS(1000UL)
+static void task_1(void *pvParameters)
+{
+	TickType_t xNextWakeTime;
+	const TickType_t xBlockTime = TASK_1_FREQUENCY_MS;
+
+	/* Prevent the compiler warning about the unused parameter. */
+	(void)pvParameters;
+
+	/* Initialise xNextWakeTime - this only needs to be done once. */
+	xNextWakeTime = xTaskGetTickCount();
+
+	uavcan_node_Heartbeat_1_0 heartbeat;
+	heartbeat.health.value = uavcan_node_Health_1_0_NOMINAL;
+	heartbeat.mode.value = uavcan_node_Mode_1_0_OPERATIONAL;
+	uint8_t buffer[uavcan_node_Heartbeat_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
+	size_t buffer_size = uavcan_node_Heartbeat_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_;
+	uint8_t heartbeat_transfer_id = 0;
+
+	for (;;)
+	{
+		vTaskDelayUntil(&xNextWakeTime, xBlockTime);
+
+		heartbeat.uptime = xTaskGetTickCount();
+		int8_t res = uavcan_node_Heartbeat_1_0_serialize_(&heartbeat, buffer, &buffer_size);
+		if (res < 0)
+		{
+			printf("Unable to serialize heartbeat message, return code: %d\n", res);
+			continue;
+		}
+
+		freecanard_transmit_subject(
+			&bus_0,
+			uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_,
+			CanardPriorityNominal,
+			buffer,
+			buffer_size,
+			&heartbeat_transfer_id);
+	}
+}
+
+int main(void)
 {
 	console_init();
-	main_blinky();
+	uavcan_init();
 
-	
+	xTaskCreate(task_1, "task 1", configMINIMAL_STACK_SIZE, NULL, TASK_1_PRIORITY, NULL);
+
 	vTaskStartScheduler();
-	while(1)
+	while (1)
 	{
-
 	}
 
 	return 0;
@@ -115,15 +154,15 @@ int main( void )
 /* configUSE_STATIC_ALLOCATION is set to 1, so the application must provide an
 implementation of vApplicationGetIdleTaskMemory() to provide the memory that is
 used by the Idle task. */
-void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer,
-									StackType_t **ppxIdleTaskStackBuffer,
-									uint32_t *pulIdleTaskStackSize )
+void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
+								   StackType_t **ppxIdleTaskStackBuffer,
+								   uint32_t *pulIdleTaskStackSize)
 {
-/* If the buffers to be provided to the Idle task are declared inside this
+	/* If the buffers to be provided to the Idle task are declared inside this
 function then they must be declared static - otherwise they will be allocated on
 the stack and so not exists after this function exits. */
 	static StaticTask_t xIdleTaskTCB;
-	static StackType_t uxIdleTaskStack[ configMINIMAL_STACK_SIZE ];
+	static StackType_t uxIdleTaskStack[configMINIMAL_STACK_SIZE];
 
 	/* Pass out a pointer to the StaticTask_t structure in which the Idle task's
 	state will be stored. */
@@ -142,11 +181,11 @@ the stack and so not exists after this function exits. */
 /* configUSE_STATIC_ALLOCATION and configUSE_TIMERS are both set to 1, so the
 application must provide an implementation of vApplicationGetTimerTaskMemory()
 to provide the memory that is used by the Timer service task. */
-void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer,
-									 StackType_t **ppxTimerTaskStackBuffer,
-									 uint32_t *pulTimerTaskStackSize )
+void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
+									StackType_t **ppxTimerTaskStackBuffer,
+									uint32_t *pulTimerTaskStackSize)
 {
-/* If the buffers to be provided to the Timer task are declared inside this
+	/* If the buffers to be provided to the Timer task are declared inside this
 function then they must be declared static - otherwise they will be allocated on
 the stack and so not exists after this function exits. */
 	static StaticTask_t xTimerTaskTCB;

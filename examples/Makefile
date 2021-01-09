@@ -9,11 +9,16 @@ FREERTOS_DIR := $(abspath $(FREERTOS_DIR_REL))
 SOURCE_DIR_REL := ./src
 SOURCE_DIR := $(abspath $(SOURCE_DIR_REL))
 
+FREECANARD_DIR_REL := ../freecanard
+FREECANARD_DIR := $(abspath $(FREECANARD_DIR_REL))
+
 LIBCANARD_DIR_REL := ./libcanard/libcanard
 LIBCANARD_DIR := $(abspath $(LIBCANARD_DIR_REL))
 
 O1HEAP_DIR_REL := ./o1heap/o1heap
 O1HEAP_DIR := $(abspath $(O1HEAP_DIR_REL))
+
+DSDL_DIR := $(abspath $(SOURCE_DIR)/dsdl)
 
 INCLUDE_DIRS := -I${SOURCE_DIR}
 INCLUDE_DIRS += -I${FREERTOS_DIR}/Source/include
@@ -22,11 +27,15 @@ INCLUDE_DIRS += -I${FREERTOS_DIR}/Source/portable/ThirdParty/GCC/Posix/utils
 INCLUDE_DIRS += -I${FREERTOS_DIR}/common/include
 INCLUDE_DIRS += -I${LIBCANARD_DIR}
 INCLUDE_DIRS += -I${O1HEAP_DIR}
+INCLUDE_DIRS += -I${FREECANARD_DIR}
+INCLUDE_DIRS += -I${DSDL_DIR}
 
 SOURCE_FILES := $(wildcard ${SOURCE_DIR}/*.c)
+SOURCE_FILES += $(wildcard ${FREECANARD_DIR}/*.c)
 SOURCE_FILES += $(wildcard ${LIBCANARD_DIR}/*.c)
 SOURCE_FILES += $(wildcard ${O1HEAP_DIR}/*.c)
 SOURCE_FILES += $(wildcard ${FREERTOS_DIR}/Source/*.c)
+
 
 # Memory manager (use malloc() / free() )
 SOURCE_FILES += ${FREERTOS_DIR}/Source/portable/MemMang/heap_3.c

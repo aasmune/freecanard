@@ -19,20 +19,37 @@ static void freecanard_to_canard_frame(const freecanard_frame_t *const can_frame
 static void canard_to_freecanard_frame(const CanardFrame *const canard_frame, freecanard_frame_t *const can_frame);
 
 static void freecanard_transmit_transfer(CanardInstance *const ins, const CanardTransfer *const transfer);
+static void freecanard_processing_task(void *canard_instance);
+
+typedef struct
+{
+    const freecanard_frame_t frame_;
+    const uint8_t redundant_transport_index_;
+} freecanard_frame_queue_item_t;
 
 void freecanard_init(
     CanardInstance *const ins,
     freecanard_cookie_t *const cookie,
-    const uint8_t node_id,
+    const uint8_t canard_node_id,
     uint8_t *memory_pool,
     const size_t memory_pool_size,
     const UBaseType_t processing_task_priority,
     const UBaseType_t processing_task_size,
-    freecanard_platform_send platform_send)
+    freecanard_platform_send platform_send,
+    freecanard_on_transfer_received on_transfer_received)
 {
     cookie->mutex_ = xSemaphoreCreateMutex();
-    cookie->processing_task_queue_ = xQueueCreate(processing_task_size, sizeof(freecanard_frame_t));
-    cookie->platformSend_ = platform_send;
+    cookie->processing_task_queue_ = xQueueCreate(processing_task_size, sizeof(freecanard_frame_queue_item_t));
+    cookie->platform_send_ = platform_send;
+    cookie->on_transfer_received_ = on_transfer_received;
+
+    xTaskCreate(
+        freecanard_processing_task,
+        "FreecanardProcessingTask",
+        configMINIMAL_STACK_SIZE,
+        (void *)ins,
+        processing_task_priority,
+        NULL);
 
     freecanard_take_mutex(&cookie->mutex_);
     cookie->o1heap_ = o1heapInit(
@@ -41,9 +58,44 @@ void freecanard_init(
         NULL,  // We don't need mutexes as heap accesses ...
         NULL); // ... will always be performed within the freecanard mutexes
     *ins = canardInit(memory_allocate, memory_free);
-    ins->node_id = node_id;
+    ins->node_id = canard_node_id;
     ins->user_reference = (void *)cookie;
     freecanard_give_mutex(&cookie->mutex_);
+}
+
+int8_t freecanard_subscribe(
+    CanardInstance *const ins,
+    const CanardTransferKind transfer_kind,
+    const CanardPortID port_id,
+    const size_t extent,
+    const CanardMicrosecond transfer_id_timeout_usec,
+    CanardRxSubscription *const out_subscription)
+{
+    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
+    freecanard_take_mutex(&cookie->mutex_);
+
+    int8_t res = canardRxSubscribe(
+        ins,
+        transfer_kind,
+        port_id,
+        extent,
+        transfer_id_timeout_usec,
+        out_subscription);
+    freecanard_give_mutex(&cookie->mutex_);
+    return res;
+}
+
+int8_t freecanard_unsubscribe(
+    CanardInstance *const ins,
+    const CanardTransferKind transfer_kind,
+    const CanardPortID port_id)
+{
+    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
+    freecanard_take_mutex(&cookie->mutex_);
+
+    int8_t res = canardRxUnsubscribe(ins, transfer_kind, port_id);
+    freecanard_give_mutex(&cookie->mutex_);
+    return res;
 }
 
 void freecanard_transmit_subject(
@@ -123,6 +175,85 @@ void freecanard_transmit_response(
     freecanard_give_mutex(&cookie->mutex_);
 }
 
+void freecanard_process_received_frame_from_ISR(
+    CanardInstance *const ins,
+    const freecanard_frame_t *const frame,
+    const uint8_t redundant_transport_index)
+{
+    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
+
+    BaseType_t HigherPriorityTaskWoken = pdFALSE;
+    freecanard_frame_queue_item_t queue_item = (freecanard_frame_queue_item_t){
+        .frame_ = *frame,
+        .redundant_transport_index_ = redundant_transport_index};
+
+    xQueueSendToBackFromISR(
+        cookie->processing_task_queue_,
+        &queue_item,
+        &HigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(HigherPriorityTaskWoken);
+}
+
+void freecanard_process_received_frame(
+    CanardInstance *const ins,
+    const freecanard_frame_t *const frame,
+    const uint8_t redundant_transport_index,
+    TickType_t timeout)
+{
+    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
+    xQueueSendToBack(cookie->processing_task_queue_, frame, timeout);
+}
+
+static void freecanard_processing_task(void *canard_instance)
+{
+    CanardInstance *ins = (CanardInstance *)canard_instance;
+    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
+
+    freecanard_frame_queue_item_t queue_item;
+    uint64_t timestamp;
+
+    while (1)
+    {
+        // Block until new frame is received
+        bool ret = xQueueReceive(cookie->processing_task_queue_, &queue_item, portMAX_DELAY);
+
+        if (ret != pdTRUE)
+        {
+            // This should not happen, if it does drop the frame
+            continue;
+        }
+
+        CanardFrame canard_frame;
+        freecanard_to_canard_frame(&queue_item.frame_, &canard_frame);
+
+        canard_frame.timestamp_usec = freecanard_get_us();
+
+        freecanard_take_mutex(&cookie->mutex_);
+        CanardTransfer transfer;
+        int8_t res = canardRxAccept(
+            ins,
+            &canard_frame,
+            queue_item.redundant_transport_index_,
+            &transfer);
+
+        if (res == 1)
+        {
+            if (cookie->on_transfer_received_)
+            {
+                cookie->on_transfer_received_(ins, &transfer);
+            }
+            ins->memory_free(ins, (void *)transfer.payload);
+        }
+        else
+        {
+            // An error has occured
+            freecanard_give_mutex(&cookie->mutex_);
+            continue; 
+        }
+        freecanard_give_mutex(&cookie->mutex_);
+    }
+}
+
 /* Private helper functions */
 
 static inline TickType_t freecanard_get_us()
@@ -185,7 +316,7 @@ static void freecanard_transmit_transfer(CanardInstance *const ins, const Canard
     {
         bool can_fd = ins->mtu_bytes == CANARD_MTU_CAN_FD ? true : false;
         canard_to_freecanard_frame(txf, &frame);
-        const int16_t res = cookie->platformSend_(&frame, can_fd); // Send the frame.
+        const int16_t res = cookie->platform_send_(&frame, can_fd); // Send the frame.
         if (res)
         {
             break; // If the driver is busy, break and retry later.

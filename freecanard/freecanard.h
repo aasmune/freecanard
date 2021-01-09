@@ -35,25 +35,43 @@ typedef int8_t (*freecanard_platform_send)(
     const freecanard_frame_t *const frame,
     const bool can_fd);
 
+typedef void (*freecanard_on_transfer_received)(
+    CanardInstance *ins,
+    const CanardTransfer *const transfer);
+
 typedef struct
 {
+    void *user_reference_;
     O1HeapInstance *o1heap_;
     SemaphoreHandle_t mutex_;
     QueueHandle_t processing_task_queue_;
-    freecanard_platform_send platformSend_;
-    void* user_reference_;
+    freecanard_platform_send platform_send_;
+    freecanard_on_transfer_received on_transfer_received_;
 } freecanard_cookie_t;
 
-
 void freecanard_init(
-    CanardInstance* const ins,
-    freecanard_cookie_t* const cookie,
-    const uint8_t node_id,
+    CanardInstance *const ins,
+    freecanard_cookie_t *const cookie,
+    const uint8_t canard_node_id,
     uint8_t *memory_pool,
     const size_t memory_pool_size,
     const UBaseType_t processing_task_priority,
     const UBaseType_t processing_task_size,
-    freecanard_platform_send platform_send);
+    freecanard_platform_send platform_send,
+    freecanard_on_transfer_received on_transfer_received);
+
+int8_t freecanard_subscribe(
+    CanardInstance *const ins,
+    const CanardTransferKind transfer_kind,
+    const CanardPortID port_id,
+    const size_t extent,
+    const CanardMicrosecond transfer_id_timeout_usec,
+    CanardRxSubscription *const out_subscription);
+
+int8_t freecanard_unsubscribe(
+    CanardInstance *const ins,
+    const CanardTransferKind transfer_kind,
+    const CanardPortID port_id);
 
 /**
  * Transmit UAVCAN subject.
@@ -127,5 +145,16 @@ void freecanard_transmit_response(
     const void *payload,
     size_t payload_len,
     uint8_t *transfer_id);
+
+void freecanard_process_received_frame_from_ISR(
+    CanardInstance *const ins,
+    const freecanard_frame_t *const frame,
+    const uint8_t redundant_transport_index);
+
+void freecanard_process_received_frame(
+    CanardInstance *const ins,
+    const freecanard_frame_t *const frame,
+    const uint8_t redundant_transport_index,
+    TickType_t timeout);
 
 #endif // FREECANARD_H

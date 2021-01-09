@@ -66,8 +66,8 @@ SOURCE_FILES += ${FREERTOS_DIR}/common/Minimal/StaticAllocation.c
 SOURCE_FILES += ${FREERTOS_DIR}/common/Minimal/StreamBufferInterrupt.c
 SOURCE_FILES += ${FREERTOS_DIR}/common/Minimal/TaskNotify.c
 
-CFLAGS := -ggdb3 -O0 -DprojCOVERAGE_TEST=0 -D_WINDOWS_ -D"NUNAVUT_ASSERT(x)=assert(x)"
-LDFLAGS := -ggdb3 -O0 -pthread -lpcap
+CFLAGS := -ggdb3 -O0 -DprojCOVERAGE_TEST=0 -D_WINDOWS_ -D"NUNAVUT_ASSERT(x)=assert(x)" -pedantic
+LDFLAGS := -ggdb3 -O0 -pthread -lpcap -pedantic
 
 OBJ_FILES = $(SOURCE_FILES:%.c=$(BUILD_DIR)/%.o)
 

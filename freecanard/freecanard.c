@@ -31,6 +31,7 @@ void freecanard_init(
     CanardInstance *const ins,
     freecanard_cookie_t *const cookie,
     const uint8_t canard_node_id,
+    const size_t mtu_bytes,
     uint8_t *memory_pool,
     const size_t memory_pool_size,
     const UBaseType_t processing_task_priority,
@@ -59,8 +60,54 @@ void freecanard_init(
         NULL); // ... will always be performed within the freecanard mutexes
     *ins = canardInit(memory_allocate, memory_free);
     ins->node_id = canard_node_id;
+    ins->mtu_bytes = mtu_bytes;
     ins->user_reference = (void *)cookie;
     freecanard_give_mutex(&cookie->mutex_);
+}
+
+void freecanard_set_node_id(CanardInstance *const ins, const uint8_t node_id)
+{
+    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
+    freecanard_take_mutex(&cookie->mutex_);
+
+    ins->node_id = node_id;
+
+    freecanard_give_mutex(&cookie->mutex_);
+}
+
+void freecanard_set_mtu_bytes(CanardInstance *const ins, const size_t mtu_bytes)
+{
+    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
+    freecanard_take_mutex(&cookie->mutex_);
+
+    ins->mtu_bytes = mtu_bytes;
+
+    freecanard_give_mutex(&cookie->mutex_);
+}
+
+void freecanard_set_user_reference(CanardInstance *const ins, void *user_reference)
+{
+    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
+    freecanard_take_mutex(&cookie->mutex_);
+
+    ins->user_reference = user_reference;
+    freecanard_give_mutex(&cookie->mutex_);
+}
+
+uint8_t freecanard_get_node_id(CanardInstance *const ins)
+{
+    return ins->node_id;
+}
+
+size_t freecanard_get_mtu_bytes(CanardInstance *const ins)
+{
+    return ins->mtu_bytes;
+}
+
+void *freecanard_get_user_reference(CanardInstance *const ins)
+{
+    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
+    return cookie->user_reference_;
 }
 
 int8_t freecanard_subscribe(
@@ -248,7 +295,7 @@ static void freecanard_processing_task(void *canard_instance)
         {
             // An error has occured
             freecanard_give_mutex(&cookie->mutex_);
-            continue; 
+            continue;
         }
         freecanard_give_mutex(&cookie->mutex_);
     }
@@ -276,12 +323,12 @@ static void *memory_allocate(CanardInstance *ins, size_t amount)
 {
     freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
     return o1heapAllocate(cookie->o1heap_, amount);
-};
+}
 
 static void memory_free(CanardInstance *ins, void *pointer)
 {
     freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
-    return o1heapFree(cookie->o1heap_, pointer);
+    o1heapFree(cookie->o1heap_, pointer);
 }
 
 static void freecanard_to_canard_frame(const freecanard_frame_t *const freecanardFrame, CanardFrame *const canardFrame)

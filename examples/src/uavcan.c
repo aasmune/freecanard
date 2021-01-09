@@ -22,6 +22,7 @@ void uavcan_init()
         &bus_0,
         &cookie_0,
         NODE_ID,
+        CANARD_MTU_CAN_FD,
         (uint8_t *)memory_pool_bus_0,
         MEMORY_POOL_BUS_0_SIZE,
         tskIDLE_PRIORITY,

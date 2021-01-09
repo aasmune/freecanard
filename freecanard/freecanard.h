@@ -53,12 +53,21 @@ void freecanard_init(
     CanardInstance *const ins,
     freecanard_cookie_t *const cookie,
     const uint8_t canard_node_id,
+    const size_t mtu_bytes,
     uint8_t *memory_pool,
     const size_t memory_pool_size,
     const UBaseType_t processing_task_priority,
     const UBaseType_t processing_task_size,
     freecanard_platform_send platform_send,
     freecanard_on_transfer_received on_transfer_received);
+
+void freecanard_set_node_id(CanardInstance *const ins, const uint8_t node_id);
+void freecanard_set_mtu_bytes(CanardInstance *const ins, const size_t mtu_bytes);
+void freecanard_set_user_reference(CanardInstance *const ins, void* user_reference);
+
+uint8_t freecanard_get_node_id(CanardInstance *const ins);
+size_t freecanard_get_mtu_bytes(CanardInstance *const ins);
+void* freecanard_get_user_reference(CanardInstance *const ins);
 
 int8_t freecanard_subscribe(
     CanardInstance *const ins,

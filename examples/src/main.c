@@ -126,7 +126,7 @@ static void task_1(void *pvParameters)
 			continue;
 		}
 
-		freecanard_transmit_subject(
+		freecanard_transmit_message(
 			&bus_0,
 			uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_,
 			CanardPriorityNominal,

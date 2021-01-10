@@ -143,9 +143,9 @@ int8_t freecanard_unsubscribe(
     return res;
 }
 
-void freecanard_transmit_subject(
+void freecanard_transmit_message(
     CanardInstance *const ins,
-    uint16_t message_id,
+    uint16_t subject_id,
     CanardPriority priority,
     const void *payload,
     size_t payload_len,
@@ -158,7 +158,7 @@ void freecanard_transmit_subject(
     transfer.timestamp_usec = freecanard_get_us();
     transfer.priority = (CanardPriority)priority;
     transfer.transfer_kind = CanardTransferKindMessage;
-    transfer.port_id = message_id;
+    transfer.port_id = subject_id;
     transfer.remote_node_id = CANARD_NODE_ID_UNSET;
     transfer.transfer_id = (*transfer_id)++;
     transfer.payload = payload;
@@ -171,7 +171,7 @@ void freecanard_transmit_subject(
 void freecanard_transmit_request(
     CanardInstance *const ins,
     uint8_t destination_node_id,
-    uint8_t request_id,
+    uint8_t service_id,
     CanardPriority priority,
     const void *payload,
     size_t payload_len,
@@ -184,7 +184,7 @@ void freecanard_transmit_request(
     transfer.timestamp_usec = freecanard_get_us();
     transfer.priority = (CanardPriority)priority;
     transfer.transfer_kind = CanardTransferKindRequest;
-    transfer.port_id = request_id;
+    transfer.port_id = service_id;
     transfer.remote_node_id = destination_node_id;
     transfer.transfer_id = (*transfer_id)++;
     transfer.payload = payload;
@@ -197,7 +197,7 @@ void freecanard_transmit_request(
 void freecanard_transmit_response(
     CanardInstance *const ins,
     uint8_t destination_node_id,
-    uint16_t response_id,
+    uint16_t service_id,
     CanardPriority priority,
     const void *payload,
     size_t payload_len,
@@ -210,7 +210,7 @@ void freecanard_transmit_response(
     transfer.timestamp_usec = freecanard_get_us();
     transfer.priority = (CanardPriority)priority;
     transfer.transfer_kind = CanardTransferKindResponse;
-    transfer.port_id = response_id;
+    transfer.port_id = service_id;
     transfer.remote_node_id = destination_node_id;
     transfer.transfer_id = (*transfer_id)++;
     transfer.payload = payload;
@@ -218,6 +218,16 @@ void freecanard_transmit_response(
     freecanard_transmit_transfer(ins, &transfer);
 
     freecanard_give_mutex(&cookie->_mutex);
+}
+
+void freecanard_process_received_frame(
+    CanardInstance *const ins,
+    const freecanard_frame_t *const frame,
+    const uint8_t redundant_transport_index,
+    TickType_t timeout)
+{
+    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
+    xQueueSendToBack(cookie->_processing_task_queue, frame, timeout);
 }
 
 void freecanard_process_received_frame_from_ISR(
@@ -239,15 +249,7 @@ void freecanard_process_received_frame_from_ISR(
     portYIELD_FROM_ISR(HigherPriorityTaskWoken);
 }
 
-void freecanard_process_received_frame(
-    CanardInstance *const ins,
-    const freecanard_frame_t *const frame,
-    const uint8_t redundant_transport_index,
-    TickType_t timeout)
-{
-    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
-    xQueueSendToBack(cookie->_processing_task_queue, frame, timeout);
-}
+
 
 static void freecanard_processing_task(void *canard_instance)
 {

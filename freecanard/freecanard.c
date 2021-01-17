@@ -1,13 +1,18 @@
 #include "freecanard.h"
+#include <task.h>
 
 #include <string.h>
 
-/* Converts a time in ticks to a time in microseconds. */
-#define pdTICKS_TO_US(xTimeInTicks)                                 \
-    ((TickType_t)(((TickType_t)1e+6 * (TickType_t)(xTimeInTicks)) / \
-                  (TickType_t)(configTICK_RATE_HZ)))
-
-static inline TickType_t freecanard_get_us();
+/**
+ * @brief CAN(-FD) data frame.
+ * 
+ */
+typedef struct
+{
+    uint32_t id;
+    uint8_t data[CANARD_MTU_CAN_FD];
+    size_t data_len;
+} freecanard_frame_t;
 
 static void freecanard_take_mutex(SemaphoreHandle_t *const mutex);
 static void freecanard_give_mutex(SemaphoreHandle_t *const mutex);
@@ -24,6 +29,7 @@ static void freecanard_processing_task(void *canard_instance);
 typedef struct
 {
     const freecanard_frame_t frame_;
+    CanardMicrosecond timestamp_usec;
     const uint8_t redundant_transport_index_;
 } freecanard_frame_queue_item_t;
 
@@ -89,7 +95,7 @@ void freecanard_set_user_reference(CanardInstance *const ins, void *user_referen
 {
     freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
 
-    ins->user_reference = user_reference;
+    cookie->user_reference_ = user_reference;
 }
 
 uint8_t freecanard_get_node_id(CanardInstance *const ins)
@@ -143,103 +149,50 @@ int8_t freecanard_unsubscribe(
     return res;
 }
 
-void freecanard_transmit_message(
-    CanardInstance *const ins,
-    uint16_t subject_id,
-    CanardPriority priority,
-    const void *payload,
-    size_t payload_len,
-    uint8_t *transfer_id)
+void freecanard_transmit(CanardInstance *const ins, const CanardTransfer *const transfer)
 {
     freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
     freecanard_take_mutex(&cookie->_mutex);
 
-    CanardTransfer transfer;
-    transfer.timestamp_usec = freecanard_get_us();
-    transfer.priority = (CanardPriority)priority;
-    transfer.transfer_kind = CanardTransferKindMessage;
-    transfer.port_id = subject_id;
-    transfer.remote_node_id = CANARD_NODE_ID_UNSET;
-    transfer.transfer_id = (*transfer_id)++;
-    transfer.payload = payload;
-    transfer.payload_size = payload_len;
-    freecanard_transmit_transfer(ins, &transfer);
-
-    freecanard_give_mutex(&cookie->_mutex);
-}
-
-void freecanard_transmit_request(
-    CanardInstance *const ins,
-    uint8_t destination_node_id,
-    uint8_t service_id,
-    CanardPriority priority,
-    const void *payload,
-    size_t payload_len,
-    uint8_t *transfer_id)
-{
-    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
-    freecanard_take_mutex(&cookie->_mutex);
-
-    CanardTransfer transfer;
-    transfer.timestamp_usec = freecanard_get_us();
-    transfer.priority = (CanardPriority)priority;
-    transfer.transfer_kind = CanardTransferKindRequest;
-    transfer.port_id = service_id;
-    transfer.remote_node_id = destination_node_id;
-    transfer.transfer_id = (*transfer_id)++;
-    transfer.payload = payload;
-    transfer.payload_size = payload_len;
-    freecanard_transmit_transfer(ins, &transfer);
-
-    freecanard_give_mutex(&cookie->_mutex);
-}
-
-void freecanard_transmit_response(
-    CanardInstance *const ins,
-    uint8_t destination_node_id,
-    uint16_t service_id,
-    CanardPriority priority,
-    const void *payload,
-    size_t payload_len,
-    uint8_t *transfer_id)
-{
-    freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
-    freecanard_take_mutex(&cookie->_mutex);
-
-    CanardTransfer transfer;
-    transfer.timestamp_usec = freecanard_get_us();
-    transfer.priority = (CanardPriority)priority;
-    transfer.transfer_kind = CanardTransferKindResponse;
-    transfer.port_id = service_id;
-    transfer.remote_node_id = destination_node_id;
-    transfer.transfer_id = (*transfer_id)++;
-    transfer.payload = payload;
-    transfer.payload_size = payload_len;
-    freecanard_transmit_transfer(ins, &transfer);
+    freecanard_transmit_transfer(ins, transfer);
 
     freecanard_give_mutex(&cookie->_mutex);
 }
 
 void freecanard_process_received_frame(
     CanardInstance *const ins,
-    const freecanard_frame_t *const frame,
+    const CanardFrame *const frame,
+    CanardMicrosecond timestamp_usec,
     const uint8_t redundant_transport_index,
     TickType_t timeout)
 {
     freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
-    xQueueSendToBack(cookie->_processing_task_queue, frame, timeout);
+
+    freecanard_frame_t freecanard_frame;
+    canard_to_freecanard_frame(frame, &freecanard_frame);
+
+    freecanard_frame_queue_item_t queue_item = (freecanard_frame_queue_item_t){
+        .frame_ = freecanard_frame,
+        .timestamp_usec = timestamp_usec,
+        .redundant_transport_index_ = redundant_transport_index};
+    xQueueSendToBack(cookie->_processing_task_queue, &queue_item, timeout);
 }
 
 void freecanard_process_received_frame_from_ISR(
     CanardInstance *const ins,
-    const freecanard_frame_t *const frame,
+    const CanardFrame *const frame,
+    CanardMicrosecond timestamp_usec,
     const uint8_t redundant_transport_index)
 {
     freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
 
+    freecanard_frame_t freecanard_frame;
+    canard_to_freecanard_frame(frame, &freecanard_frame);
+
     BaseType_t HigherPriorityTaskWoken = pdFALSE;
     freecanard_frame_queue_item_t queue_item = (freecanard_frame_queue_item_t){
-        .frame_ = *frame,
+        .frame_ = freecanard_frame,
+        .timestamp_usec = timestamp_usec,
         .redundant_transport_index_ = redundant_transport_index};
 
     xQueueSendToBackFromISR(
@@ -249,15 +202,12 @@ void freecanard_process_received_frame_from_ISR(
     portYIELD_FROM_ISR(HigherPriorityTaskWoken);
 }
 
-
-
 static void freecanard_processing_task(void *canard_instance)
 {
     CanardInstance *ins = (CanardInstance *)canard_instance;
     freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
 
     freecanard_frame_queue_item_t queue_item;
-    uint64_t timestamp;
 
     while (1)
     {
@@ -272,8 +222,7 @@ static void freecanard_processing_task(void *canard_instance)
 
         CanardFrame canard_frame;
         freecanard_to_canard_frame(&queue_item.frame_, &canard_frame);
-
-        canard_frame.timestamp_usec = freecanard_get_us();
+        canard_frame.timestamp_usec = queue_item.timestamp_usec;
 
         freecanard_take_mutex(&cookie->_mutex);
         CanardTransfer transfer;
@@ -302,11 +251,6 @@ static void freecanard_processing_task(void *canard_instance)
 }
 
 /* Private helper functions */
-
-static inline TickType_t freecanard_get_us()
-{
-    return pdTICKS_TO_US(xTaskGetTickCount());
-}
 
 static void freecanard_take_mutex(SemaphoreHandle_t *const mutex)
 {
@@ -358,12 +302,10 @@ static void freecanard_transmit_transfer(CanardInstance *const ins, const Canard
     freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
 
     canardTxPush(ins, transfer);
-    freecanard_frame_t frame;
     for (const CanardFrame *txf = NULL; (txf = canardTxPeek(ins)) != NULL;) // Look at the top of the TX queue.
     {
         bool can_fd = ins->mtu_bytes == CANARD_MTU_CAN_FD ? true : false;
-        canard_to_freecanard_frame(txf, &frame);
-        const int16_t res = cookie->_platform_send(&frame, can_fd); // Send the frame.
+        const int16_t res = cookie->_platform_send(txf, can_fd); // Send the frame.
         if (res)
         {
             break; // If the driver is busy, break and retry later.

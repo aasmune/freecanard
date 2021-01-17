@@ -13,17 +13,6 @@
 #define FREECANARD_DEFAULT_PROCESSING_TASK_QUEUE_SIZE 10
 
 /**
- * @brief CAN(-FD) data frame.
- * 
- */
-typedef struct
-{
-    uint32_t id;
-    uint8_t data[CANARD_MTU_CAN_FD];
-    size_t data_len;
-} freecanard_frame_t;
-
-/**
  * @brief Platform agnostic function that are used to send a frame over your 
  * interface of choice.
  * 
@@ -39,7 +28,7 @@ typedef struct
  * @return <0               In case of error.
  */
 typedef int8_t (*freecanard_platform_send)(
-    const freecanard_frame_t *const frame,
+    const CanardFrame *const frame,
     const bool can_fd);
 
 /**
@@ -227,7 +216,7 @@ int8_t freecanard_unsubscribe(
     const CanardPortID port_id);
 
 /**
- * @brief Transmit an UAVCAN message.
+ * @brief Transmit an UAVCAN transfer.
  * 
  * @note This function is thread-safe, and may be called concurrently
  * from several tasks.
@@ -237,95 +226,11 @@ int8_t freecanard_unsubscribe(
  * 
  * @param ins Canard instance
  * 
- * @param subject_id Subject-ID of the message.
- * 
- * @param priority The priority level of the message.
- * 
- * @param payload The serialized UAVCAN message. 
- * 
- * @param payload_len Length of serialized UAVCAN message.
- * 
- * @param transfer_id The transfer ID of the message.
- * @note The transfer ID must be persistent i.e. either declared in 
- * global scope, or as static!
+ * @param transfer Serialized UAVCAN transfer.
  */
-void freecanard_transmit_message(
+void freecanard_transmit(
     CanardInstance *const ins,
-    uint16_t subject_id,
-    CanardPriority priority,
-    const void *payload,
-    size_t payload_len,
-    uint8_t *transfer_id);
-
-/**
- * @brief Transmit an UAVCAN service request.
- * 
- * @note This function is thread-safe, and may be called concurrently
- * from several tasks.
- * 
- * @warning This function shall not be called from an 
- * Interrupt Service Routine (ISR).
- * 
- * @param ins Canard instance
- * 
- * @param destination_node_id ID of the node which should receive the request.
- * 
- * @param service_id Subject-ID of the service request.
- * 
- * @param priority The priority level of the service request.
- * 
- * @param payload The serialized UAVCAN service request. 
- * 
- * @param payload_len Length of serialized UAVCAN service request.
- * 
- * @param transfer_id The transfer ID of the service request.
- * @note The transfer ID must be persistent i.e. either declared in 
- * global scope, or as static!
- */
-void freecanard_transmit_request(
-    CanardInstance *const ins,
-    uint8_t destination_node_id,
-    uint8_t service_id,
-    CanardPriority priority,
-    const void *payload,
-    size_t payload_len,
-    uint8_t *transfer_id);
-
-/**
- * @brief Transmit an UAVCAN service response.
- * 
- * @note This function is thread-safe, and may be called concurrently
- * from several tasks.
- * 
- * @warning This function shall not be called from an 
- * Interrupt Service Routine (ISR).
- * 
- * @param ins Canard instance
- * 
- * @param destination_node_id ID of the node which should receive the response.
- * 
- * @param service_id Subject-ID of the service response.
- * 
- * @param priority The priority level of the service response.
- * 
- * @param payload The serialized UAVCAN service response. 
- * 
- * @param payload_len Length of serialized UAVCAN service response.
- * 
- * @param transfer_id The transfer ID of the service response.
- * @note For service responces, the transfer_id shall be identical to the 
- * request, see UAVCAN specification for more details.
- */
-void freecanard_transmit_response(
-    CanardInstance *const ins,
-    uint8_t destination_node_id,
-    uint16_t service_id,
-    CanardPriority priority,
-    const void *payload,
-    size_t payload_len,
-    uint8_t *transfer_id);
-
-
+    const CanardTransfer *const transfer);
 
 /**
  * @brief process received CAN(-FD) frame.
@@ -347,6 +252,8 @@ void freecanard_transmit_response(
  * the local canard node, i.e. frames of any MTU (e.g. CAN-FD) may be accepted 
  * even if local canard node is configured for Classical CAN 2.0 only.
  * 
+ * @param timestamp_usec Reception timestamp of frame in usec.
+ * 
  * @param redundant_transport_index Transport index for which the frame is 
  * received. 
  * 
@@ -355,11 +262,12 @@ void freecanard_transmit_response(
  */
 void freecanard_process_received_frame(
     CanardInstance *const ins,
-    const freecanard_frame_t *const frame,
+    const CanardFrame *const frame,
+    CanardMicrosecond timestamp_usec,
     const uint8_t redundant_transport_index,
     TickType_t timeout);
 
-    /**
+/**
  * @brief process received CAN(-FD) frame from ISR.
  * 
  * This function is similar in functionality to @ref
@@ -375,12 +283,15 @@ void freecanard_process_received_frame(
  * the local canard node, i.e. frames of any MTU (e.g. CAN-FD) may be accepted 
  * even if local canard node is configured for Classical CAN 2.0 only.
  * 
+ * @param timestamp_usec Reception timestamp of frame in usec.
+ * 
  * @param redundant_transport_index Transport index for which the frame is 
  * received. 
  */
 void freecanard_process_received_frame_from_ISR(
     CanardInstance *const ins,
-    const freecanard_frame_t *const frame,
+    const CanardFrame *const frame,
+    CanardMicrosecond timestamp_usec,
     const uint8_t redundant_transport_index);
 
 #endif // FREECANARD_H

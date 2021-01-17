@@ -162,7 +162,6 @@ void freecanard_transmit(CanardInstance *const ins, const CanardTransfer *const 
 void freecanard_process_received_frame(
     CanardInstance *const ins,
     const CanardFrame *const frame,
-    CanardMicrosecond timestamp_usec,
     const uint8_t redundant_transport_index,
     TickType_t timeout)
 {
@@ -173,7 +172,7 @@ void freecanard_process_received_frame(
 
     freecanard_frame_queue_item_t queue_item = (freecanard_frame_queue_item_t){
         .frame_ = freecanard_frame,
-        .timestamp_usec = timestamp_usec,
+        .timestamp_usec = frame->timestamp_usec,
         .redundant_transport_index_ = redundant_transport_index};
     xQueueSendToBack(cookie->_processing_task_queue, &queue_item, timeout);
 }
@@ -181,7 +180,6 @@ void freecanard_process_received_frame(
 void freecanard_process_received_frame_from_ISR(
     CanardInstance *const ins,
     const CanardFrame *const frame,
-    CanardMicrosecond timestamp_usec,
     const uint8_t redundant_transport_index)
 {
     freecanard_cookie_t *cookie = (freecanard_cookie_t *)ins->user_reference;
@@ -192,7 +190,7 @@ void freecanard_process_received_frame_from_ISR(
     BaseType_t HigherPriorityTaskWoken = pdFALSE;
     freecanard_frame_queue_item_t queue_item = (freecanard_frame_queue_item_t){
         .frame_ = freecanard_frame,
-        .timestamp_usec = timestamp_usec,
+        .timestamp_usec = frame->timestamp_usec,
         .redundant_transport_index_ = redundant_transport_index};
 
     xQueueSendToBackFromISR(

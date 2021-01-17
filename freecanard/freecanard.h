@@ -263,7 +263,6 @@ void freecanard_transmit(
 void freecanard_process_received_frame(
     CanardInstance *const ins,
     const CanardFrame *const frame,
-    CanardMicrosecond timestamp_usec,
     const uint8_t redundant_transport_index,
     TickType_t timeout);
 
@@ -291,7 +290,6 @@ void freecanard_process_received_frame(
 void freecanard_process_received_frame_from_ISR(
     CanardInstance *const ins,
     const CanardFrame *const frame,
-    CanardMicrosecond timestamp_usec,
     const uint8_t redundant_transport_index);
 
 #endif // FREECANARD_H
